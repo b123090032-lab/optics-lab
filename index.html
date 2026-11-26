@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>光的干涉與繞射實驗室 Slit Lab</title>
+<style>
+  :root{
+    --bg:#0e1220; --panel:#171c2e; --line:#2a3150; --text:#e8ecf8; --muted:#97a0bf;
+    --accent:#5cc8ff; --warn:#ffb454; --ok:#5be39a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;background:var(--bg);color:var(--text);line-height:1.5}
+  header{padding:18px 20px 8px;max-width:1200px;margin:0 auto}
+  h1{margin:0;font-size:24px}
+  header p{margin:4px 0 10px;color:var(--muted);font-size:14px}
+  .presets{display:flex;flex-wrap:wrap;gap:8px}
+  button{font:inherit;border:1px solid var(--line);background:#222944;color:var(--text);border-radius:10px;padding:8px 14px;cursor:pointer;min-height:40px}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);color:#06121f;border-color:var(--accent);font-weight:700}
+  main{max-width:1200px;margin:0 auto;padding:10px 20px 40px;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+  .card h2{font-size:15px;margin:0 0 10px;color:var(--muted);font-weight:600}
+  canvas{display:block;width:100%;border-radius:8px}
+  #screen{height:90px;background:#000}
+  #plot{height:220px;background:#0a0e1a;margin-top:10px;cursor:crosshair}
+  .readout{display:flex;gap:16px;flex-wrap:wrap;font-size:14px;color:var(--muted);margin-top:8px;font-variant-numeric:tabular-nums}
+  .readout b{color:var(--text)}
+  .ctrl{margin-bottom:12px}
+  .ctrl label{display:flex;justify-content:space-between;font-size:14px;margin-bottom:2px}
+  .ctrl input[type=range]{width:100%}
+  .ctrl .num{width:80px;background:#0a0e1a;border:1px solid var(--line);color:var(--text);border-radius:6px;padding:2px 6px;font:inherit;text-align:right}
+  select{background:#0a0e1a;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:4px;font:inherit}
+  .calc{font-size:14px;display:grid;gap:4px}
+  .calc span{color:var(--muted)}
+  .swatch{display:inline-block;width:14px;height:14px;border-radius:50%;vertical-align:-2px;margin-left:6px;border:1px solid #fff4}
+  @media (max-width:900px){
+    main{grid-template-columns:1fr}
+    header h1{font-size:20px}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>🔬 光的干涉與繞射實驗室</h1>
+  <p>拉動右邊的參數，看看單狹縫、雙狹縫、光柵的條紋怎麼變。</p>
+  <div class="presets">
+    <button data-preset="single">單狹縫</button>
+    <button data-preset="double">楊氏雙狹縫</button>
+    <button data-preset="grating">光柵 N=8</button>
+    <button data-preset="redblue">紅光 vs 藍光</button>
+  </div>
+</header>
+<main>
+  <section>
+    <div class="card">
+      <h2>螢幕上看到的條紋</h2>
+      <canvas id="screen"></canvas>
+      <canvas id="plot"></canvas>
+      <div class="readout" id="readout">
+        <div>y = <b id="ry">—</b> mm</div>
+        <div>θ = <b id="rt">—</b>°</div>
+        <div>I/I₀ = <b id="ri">—</b></div>
+      </div>
+    </div>
+  </section>
+  <aside>
+    <div class="card">
+      <h2>實驗參數</h2>
+      <div class="ctrl"><label>波長 λ (nm)<span class="swatch" id="sw"></span><input class="num" id="lambdaN" type="number"></label><input type="range" id="lambda" min="380" max="750" step="1"></div>
+      <div class="ctrl"><label>縫數 N<input class="num" id="NN" type="number"></label><input type="range" id="N" min="1" max="10" step="1"></div>
+      <div class="ctrl"><label>縫寬 a (mm)<input class="num" id="aN" type="number" step="0.01"></label><input type="range" id="a" min="0.01" max="0.2" step="0.01"></div>
+      <div class="ctrl"><label>縫距 d (mm)<input class="num" id="dN" type="number" step="0.01"></label><input type="range" id="d" min="0.05" max="1" step="0.01"></div>
+      <div class="ctrl"><label>螢幕距離 L (m)<input class="num" id="LN" type="number" step="0.1"></label><input type="range" id="L" min="0.5" max="3" step="0.1"></div>
+      <div class="ctrl"><label>顯示範圍
+        <select id="range"><option value="5">±5 mm</option><option value="10">±10 mm</option><option value="20">±20 mm</option><option value="50">±50 mm</option></select></label></div>
+      <div class="ctrl"><label><span><input type="checkbox" id="envelope"> 顯示單縫包絡線</span></label></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h2>計算結果</h2>
+      <div class="calc">
+        <div><span>亮紋間距 Δy = λL/d ≈ </span><b id="cdy"></b></div>
+        <div><span>中央亮帶寬 = 2λL/a ≈ </span><b id="cw"></b></div>
+      </div>
+    </div>
+  </aside>
+</main>
+<script>
+const P = { lambda:532, N:2, a:0.04, d:0.25, L:1.0, range:20, envelope:true };
+const PRESETS = {
+  single:  { lambda:532, N:1, a:0.05, d:0.25, L:1.0, range:50 },
+  double:  { lambda:532, N:2, a:0.04, d:0.25, L:1.0, range:20 },
+  grating: { lambda:532, N:8, a:0.02, d:0.10, L:1.0, range:50 },
+  redblue: { lambda:650, N:2, a:0.04, d:0.25, L:1.0, range:20 },
+};
+const $ = id => document.getElementById(id);
+const KEYS = ['lambda','N','a','d','L'];
+
+// 波長 → RGB（近似）
+function waveRGB(nm){
+  let r=0,g=0,b=0;
+  if(nm<440){r=-(nm-440)/60;b=1}
+  else if(nm<490){g=(nm-440)/50;b=1}
+  else if(nm<510){g=1;b=-(nm-510)/20}
+  else if(nm<580){r=(nm-510)/70;g=1}
+  else if(nm<645){r=1;g=-(nm-645)/65}
+  else {r=1}
+  let f=1;
+  if(nm<420) f=0.3+0.7*(nm-380)/40;
+  else if(nm>700) f=0.3+0.7*(750-nm)/50;
+  return [r*f*255,g*f*255,b*f*255].map(Math.round);
+}
+
+// 相對強度 I/I0
+function intensity(y_mm, p){
+  const lam = p.lambda*1e-9, a=p.a*1e-3, d=p.d*1e-3, L=p.L, y=y_mm*1e-3;
+  const s = y/Math.sqrt(y*y+L*L);
+  const beta = Math.PI*a*s/lam;
+  const gamma = Math.PI*d*s/lam;
+  const diff = Math.pow(Math.sin(beta)/beta,2);
+  const inter = p.N===1 ? 1 : Math.pow(Math.sin(p.N*gamma)/(p.N*Math.sin(gamma)),2);
+  return diff*inter;
+}
+function envelopeI(y_mm,p){
+  const lam=p.lambda*1e-9,a=p.a*1e-3,y=y_mm*1e-3;
+  const s=y/Math.sqrt(y*y+p.L*p.L), beta=Math.PI*a*s/lam;
+  return Math.pow(Math.sin(beta)/beta,2);
+}
+
+function fitCanvas(c){
+  const dpr = window.devicePixelRatio||1;
+  const w = c.clientWidth, h = c.clientHeight;
+  c.width = w*dpr; c.height = h*dpr;
+  const ctx = c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {ctx,w,h};
+}
+
+function drawScreen(){
+  const {ctx,w,h} = fitCanvas($('screen'));
+  const [r,g,b] = waveRGB(P.lambda);
+  for(let x=0;x<w;x++){
+    const y = (x/w*2-1)*P.range;
+    const I = intensity(y,P);
+    const v = Math.pow(I,0.5);
+    ctx.fillStyle = `rgb(${r*v|0},${g*v|0},${b*v|0})`;
+    ctx.fillRect(x,0,1,h);
+  }
+}
+
+const PAD = {l:40,r:10,t:10,b:26};
+function drawPlot(){
+  const {ctx,w,h} = fitCanvas($('plot'));
+  const pw = w-PAD.l-PAD.r, ph = h-PAD.t-PAD.b;
+  ctx.strokeStyle='#2a3150'; ctx.fillStyle='#97a0bf'; ctx.font='11px sans-serif';
+  // 格線與刻度
+  ctx.beginPath();
+  for(let i=0;i<=8;i++){
+    const x = PAD.l+pw*i/8; ctx.moveTo(x,PAD.t); ctx.lineTo(x,PAD.t+ph);
+    const yv = (-P.range + 2*P.range*i/8);
+    ctx.fillText(yv.toFixed(1), x-12, h-8);
+  }
+  for(let i=0;i<=4;i++){
+    const y = PAD.t+ph*i/4; ctx.moveTo(PAD.l,y); ctx.lineTo(PAD.l+pw,y);
+    ctx.fillText((1-i/4).toFixed(2),4,y+4);
+  }
+  ctx.stroke();
+  if(P.envelope && P.N>1){
+    ctx.setLineDash([5,4]); ctx.strokeStyle='#ffffff66'; ctx.beginPath();
+    for(let x=0;x<=pw;x++){
+      const y=(x/pw*2-1)*P.range, I=envelopeI(y,P);
+      const py=PAD.t+ph*(1-I); x?ctx.lineTo(PAD.l+x,py):ctx.moveTo(PAD.l+x,py);
+    }
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  const [r,g,b]=waveRGB(P.lambda);
+  ctx.strokeStyle=`rgb(${Math.max(r,80)},${Math.max(g,80)},${Math.max(b,80)})`; ctx.lineWidth=1.5; ctx.beginPath();
+  for(let x=0;x<=pw;x++){
+    const y=(x/pw*2-1)*P.range, I=intensity(y,P);
+    const py=PAD.t+ph*(1-I); x?ctx.lineTo(PAD.l+x,py):ctx.moveTo(PAD.l+x,py);
+  }
+  ctx.stroke(); ctx.lineWidth=1;
+}
+
+function fmtLen(m){ return m>=1e-3 ? (m*1e3).toFixed(2)+' mm' : (m*1e6).toFixed(0)+' µm'; }
+function updateCalc(){
+  const lam=P.lambda*1e-9;
+  $('cdy').textContent = P.N>1 ? fmtLen(lam*P.L/(P.d*1e-3)) : '（N=1 沒有干涉條紋）';
+  $('cw').textContent = fmtLen(2*lam*P.L/(P.a*1e-3));
+  const [r,g,b]=waveRGB(P.lambda); $('sw').style.background=`rgb(${r},${g},${b})`;
+}
+
+function syncInputs(){
+  KEYS.forEach(k=>{ $(k).value=P[k]; $(k+'N').value=P[k]; });
+  $('range').value=P.range; $('envelope').checked=P.envelope;
+}
+function render(){ drawScreen(); drawPlot(); updateCalc(); }
+
+KEYS.forEach(k=>{
+  $(k).addEventListener('input',e=>{ P[k]=parseFloat(e.target.value); $(k+'N').value=P[k]; render(); });
+  $(k+'N').addEventListener('change',e=>{ P[k]=parseFloat(e.target.value); $(k).value=P[k]; render(); });
+});
+$('range').addEventListener('change',e=>{P.range=+e.target.value;render();});
+$('envelope').addEventListener('change',e=>{P.envelope=e.target.checked;render();});
+document.querySelectorAll('[data-preset]').forEach(btn=>btn.addEventListener('click',()=>{
+  Object.assign(P,PRESETS[btn.dataset.preset]); syncInputs(); render();
+}));
+
+// 量測游標
+$('plot').addEventListener('mousemove',e=>{
+  const rect=$('plot').getBoundingClientRect();
+  const x=e.clientX-rect.left-PAD.l, pw=rect.width-PAD.l-PAD.r;
+  const y=(x/pw*2-1)*P.range;
+  const th=Math.atan(y*1e-3/P.L)*180/Math.PI;
+  $('ry').textContent=y.toFixed(2); $('rt').textContent=th.toFixed(3); $('ri').textContent=intensity(y,P).toFixed(3);
+});
+
+window.addEventListener('resize',render);
+syncInputs(); render();
+</script>
+</body>
+</html>
