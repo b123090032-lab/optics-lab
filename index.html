@@ -40,6 +40,9 @@
   button:disabled{opacity:.4;cursor:not-allowed}
   button.small{min-height:28px;padding:2px 10px;font-size:13px;float:right}
   #wave{height:240px;background:#000;image-rendering:pixelated}
+  .toast{min-height:20px;font-size:13px;color:var(--warn);margin-top:6px}
+  .ok{color:var(--ok)} .bad{color:var(--warn)}
+  .masked{filter:blur(6px);pointer-events:none;user-select:none}
   @media (max-width:900px){
     main{grid-template-columns:1fr;grid-template-areas:'plot' 'side' 'wave'}
     header h1{font-size:20px}
@@ -73,6 +76,7 @@
         <button id="clearLock" disabled>清除比較線</button>
         <span class="hint" id="lockInfo"></span>
       </div>
+      <div class="toast" id="toast" role="status"></div>
     </div>
   </section>
   <aside>
@@ -92,6 +96,25 @@
       <div class="calc">
         <div><span>亮紋間距 Δy = λL/d ≈ </span><b id="cdy"></b></div>
         <div><span>中央亮帶寬 = 2λL/a ≈ </span><b id="cw"></b></div>
+      </div>
+      <div class="row">
+        <button id="shareBtn">🔗 複製分享連結</button>
+        <button id="pngBtn">🖼 下載圖片</button>
+        <button id="resetBtn">↺ 恢復預設</button>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px" id="chCard">
+      <h2>🎯 挑戰模式：從條紋猜波長</h2>
+      <div id="chIdle">
+        <p class="hint">系統會藏一個 400–700 nm 的波長，你用游標量亮紋間距，再用 λ = Δy·d / L 算回去。一輪 3 題，誤差 2% 以內拿滿分。</p>
+        <button class="primary" id="chStart">開始挑戰</button>
+        <span class="hint">最高分：<b id="best">—</b></span>
+      </div>
+      <div id="chRun" hidden>
+        <p>第 <b id="chQ">1</b> / 3 題　目前總分 <b id="chScore">0</b></p>
+        <p class="hint" id="chGiven"></p>
+        <div class="row"><input class="num" id="chGuess" type="number" placeholder="λ (nm)" style="width:110px"> <button class="primary" id="chSubmit">送出</button> <button id="chQuit">放棄</button></div>
+        <p id="chMsg"></p>
       </div>
     </div>
   </aside>
@@ -230,16 +253,16 @@ function syncInputs(){
   KEYS.forEach(k=>{ $(k).value=P[k]; $(k+'N').value=P[k]; });
   $('range').value=P.range; $('envelope').checked=P.envelope;
 }
-function render(){ drawScreen(); drawPlot(); updateCalc(); }
+function render(){ drawScreen(); drawPlot(); updateCalc(); save(); }
 
 KEYS.forEach(k=>{
-  $(k).addEventListener('input',e=>{ P[k]=parseFloat(e.target.value); $(k+'N').value=P[k]; render(); });
-  $(k+'N').addEventListener('change',e=>{ P[k]=parseFloat(e.target.value); $(k).value=P[k]; render(); });
+  $(k).addEventListener('input',e=>{ P[k]=parseFloat(e.target.value); sanitize(k); syncInputs(); render(); });
+  $(k+'N').addEventListener('change',e=>{ P[k]=parseFloat(e.target.value); sanitize(k); syncInputs(); render(); });
 });
 $('range').addEventListener('change',e=>{P.range=+e.target.value;render();});
 $('envelope').addEventListener('change',e=>{P.envelope=e.target.checked;render();});
 document.querySelectorAll('[data-preset]').forEach(btn=>btn.addEventListener('click',()=>{
-  Object.assign(P,PRESETS[btn.dataset.preset]); syncInputs(); render();
+  Object.assign(P,PRESETS[btn.dataset.preset]); sanitize(); syncInputs(); render();
 }));
 
 // 量測游標
@@ -305,8 +328,107 @@ $('playBtn').addEventListener('click',()=>{ playing=!playing; $('playBtn').textC
 window.addEventListener('resize',setupWave);
 requestAnimationFrame(loop);
 
+// ===== 防呆：範圍夾住、d 不能小於 a =====
+const LIM={lambda:[380,750],N:[1,10],a:[0.01,0.2],d:[0.05,1],L:[0.5,3]};
+let toastTimer=null;
+function toast(msg){ $('toast').textContent=msg; clearTimeout(toastTimer); toastTimer=setTimeout(()=>$('toast').textContent='',3500); }
+function sanitize(changed){
+  KEYS.forEach(k=>{
+    let v=+P[k]; if(!isFinite(v)) v=LIM[k][0];
+    const c=Math.min(LIM[k][1],Math.max(LIM[k][0],v));
+    if(c!==v && k===changed) toast(`${k} 超出範圍，已改成 ${c}`);
+    P[k]= k==='N'||k==='lambda' ? Math.round(c) : Math.round(c*100)/100;
+  });
+  if(P.d<P.a){
+    if(changed==='a'){ P.d=P.a; toast('縫距 d 不能比縫寬 a 小（縫會重疊），已把 d 調成 '+P.d+' mm'); }
+    else { P.d=P.a; toast('縫距 d 不能比縫寬 a 小（縫會重疊），已把 d 調回 '+P.d+' mm'); }
+  }
+}
+
+// ===== 儲存 / 分享 =====
+const STORE='slitlab.params', BEST='slitlab.best';
+function save(){ if(!challenge) try{ localStorage.setItem(STORE,JSON.stringify(P)); }catch(e){} }
+function toHash(){ return `#l=${P.lambda}&n=${P.N}&a=${P.a}&d=${P.d}&L=${P.L}&r=${P.range}`; }
+function loadInitial(){
+  const h=new URLSearchParams(location.hash.slice(1));
+  if(h.has('l')){
+    const m={l:'lambda',n:'N',a:'a',d:'d',L:'L',r:'range'};
+    for(const [k,v] of h){ if(m[k]) P[m[k]]=parseFloat(v); }
+    if(![5,10,20,50].includes(P.range)) P.range=20;
+    return;
+  }
+  try{ const s=JSON.parse(localStorage.getItem(STORE)); if(s) Object.assign(P,s); }catch(e){}
+}
+$('shareBtn').addEventListener('click',async()=>{
+  const url=location.href.split('#')[0]+toHash();
+  try{ await navigator.clipboard.writeText(url); toast('已複製分享連結 ✔'); }
+  catch(e){ prompt('複製這個連結：',url); }
+});
+$('pngBtn').addEventListener('click',()=>{
+  const s=$('screen'), p=$('plot'), out=document.createElement('canvas');
+  out.width=Math.max(s.width,p.width); out.height=s.height+p.height+40*(window.devicePixelRatio||1);
+  const c=out.getContext('2d'); c.fillStyle='#0e1220'; c.fillRect(0,0,out.width,out.height);
+  c.drawImage(s,0,0); c.drawImage(p,0,s.height);
+  c.fillStyle='#e8ecf8'; c.font=`${14*(window.devicePixelRatio||1)}px sans-serif`;
+  c.fillText(challenge?'挑戰模式':describe(P), 8, s.height+p.height+26*(window.devicePixelRatio||1));
+  const a=document.createElement('a'); a.download='slit-lab.png'; a.href=out.toDataURL('image/png'); a.click();
+});
+$('resetBtn').addEventListener('click',()=>{ Object.assign(P,PRESETS.double,{envelope:true}); history.replaceState(null,'',location.pathname); syncInputs(); render(); });
+
+// ===== 挑戰模式 =====
+let challenge=null;
+function newQuestion(){
+  challenge.answer = 400 + Math.round(Math.random()*30)*10;
+  challenge.d = [0.15,0.2,0.25,0.3][Math.floor(Math.random()*4)];
+  challenge.L = [1,1.5,2][Math.floor(Math.random()*3)];
+  Object.assign(P,{lambda:challenge.answer,N:2,a:0.04,d:challenge.d,L:challenge.L,range:20});
+  $('chGiven').textContent=`已知：雙狹縫 d = ${challenge.d} mm，L = ${challenge.L} m。量量看亮紋間距！`;
+  $('chQ').textContent=challenge.q; $('chScore').textContent=challenge.score;
+  $('chGuess').value=''; $('chMsg').textContent='';
+  syncInputs(); render();
+}
+function setMasked(on){
+  ['lambda','lambdaN','N','NN','a','aN','d','dN','L','LN'].forEach(id=>$(id).disabled=on);
+  document.querySelectorAll('[data-preset]').forEach(b=>b.disabled=on);
+  $('lambda').closest('.ctrl').classList.toggle('masked',on);
+  $('cdy').closest('.calc').classList.toggle('masked',on);
+}
+$('chStart').addEventListener('click',()=>{
+  challenge={q:1,score:0,backup:{...P}}; $('chIdle').hidden=true; $('chRun').hidden=false; setMasked(true); newQuestion();
+});
+function endChallenge(){
+  const final=challenge.score;
+  Object.assign(P,challenge.backup); challenge=null; setMasked(false);
+  $('chIdle').hidden=false; $('chRun').hidden=true; syncInputs(); render();
+  return final;
+}
+$('chSubmit').addEventListener('click',()=>{
+  if(!challenge || challenge.done) return;
+  const g=parseFloat($('chGuess').value);
+  if(!isFinite(g)||g<=0){ $('chMsg').innerHTML='<span class="bad">請輸入數字（單位 nm）</span>'; return; }
+  const err=Math.abs(g-challenge.answer)/challenge.answer;
+  const pts = err<=0.02 ? 100 : Math.max(0, Math.round(100-(err-0.02)*500));
+  challenge.score+=pts;
+  $('chMsg').innerHTML=`答案是 <b>${challenge.answer} nm</b>，你猜 ${g} nm，誤差 ${(err*100).toFixed(1)}%，得 <b class="${pts>=80?'ok':'bad'}">${pts}</b> 分`;
+  challenge.done=true;
+  setTimeout(()=>{
+    if(!challenge) return;
+    challenge.done=false;
+    if(challenge.q<3){ challenge.q++; newQuestion(); }
+    else{
+      const total=Math.round(challenge.score/3);
+      const best=Math.max(total, +localStorage.getItem(BEST)||0);
+      localStorage.setItem(BEST,best); $('best').textContent=best;
+      endChallenge(); toast(`挑戰結束！平均 ${total} 分（最高分 ${best}）`);
+    }
+  },1800);
+});
+$('chGuess').addEventListener('keydown',e=>{ if(e.key==='Enter') $('chSubmit').click(); });
+$('chQuit').addEventListener('click',()=>{ endChallenge(); toast('已放棄這輪挑戰'); });
+
 window.addEventListener('resize',render);
-syncInputs(); render();
+loadInitial(); sanitize(); syncInputs(); render();
+$('best').textContent=localStorage.getItem(BEST)||'—';
 </script>
 </body>
 </html>
