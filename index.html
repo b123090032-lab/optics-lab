@@ -35,6 +35,7 @@
   .calc{font-size:14px;display:grid;gap:4px}
   .calc span{color:var(--muted)}
   .swatch{display:inline-block;width:14px;height:14px;border-radius:50%;vertical-align:-2px;margin-left:6px;border:1px solid #fff4}
+  .tip{margin:10px 0 0;font-size:14px;color:#ffd58a;min-height:21px}
   .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
   .hint{font-size:13px;color:var(--muted)}
   button:disabled{opacity:.4;cursor:not-allowed}
@@ -60,6 +61,7 @@
     <button data-preset="grating">光柵 N=8</button>
     <button data-preset="redblue">紅光 vs 藍光</button>
   </div>
+  <p class="tip" id="tip">💡 選一個預設實驗，這裡會告訴你要觀察什麼。</p>
 </header>
 <main>
   <section>
@@ -133,6 +135,12 @@ const PRESETS = {
   double:  { lambda:532, N:2, a:0.04, d:0.25, L:1.0, range:20 },
   grating: { lambda:532, N:8, a:0.02, d:0.10, L:1.0, range:50 },
   redblue: { lambda:650, N:2, a:0.04, d:0.25, L:1.0, range:20 },
+};
+const TIPS = {
+  single:  '💡 單狹縫：中央亮帶最寬、最亮，兩邊的亮紋寬度只有它的一半。試試把縫寬 a 調小，中央亮帶會變寬。',
+  double:  '💡 雙狹縫：等間距的亮紋，被虛線（單縫包絡線）罩住。把縫距 d 調大，條紋會變密。',
+  grating: '💡 光柵：縫越多，主亮紋越細越尖，中間多了 N−2 個很小的次亮紋。把 N 從 2 慢慢拉到 10 看看。',
+  redblue: '💡 紅光 vs 藍光：已經先把目前的紅光（650 nm）鎖成灰線，現在畫面是藍光（450 nm），看藍光條紋比較密。',
 };
 const $ = id => document.getElementById(id);
 const KEYS = ['lambda','N','a','d','L'];
@@ -265,7 +273,13 @@ KEYS.forEach(k=>{
 $('range').addEventListener('change',e=>{P.range=+e.target.value;render();});
 $('envelope').addEventListener('change',e=>{P.envelope=e.target.checked;render();});
 document.querySelectorAll('[data-preset]').forEach(btn=>btn.addEventListener('click',()=>{
-  Object.assign(P,PRESETS[btn.dataset.preset]); sanitize(); syncInputs(); render();
+  const key=btn.dataset.preset;
+  Object.assign(P,PRESETS[key]); sanitize();
+  if(key==='redblue'){ // 先鎖紅光，再切成藍光，直接有對照
+    locked={...P}; $('clearLock').disabled=false; $('lockInfo').textContent='灰線：'+describe(locked);
+    P.lambda=450;
+  }
+  syncInputs(); render(); $('tip').textContent=TIPS[key];
 }));
 
 // 量測游標
