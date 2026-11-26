@@ -147,8 +147,10 @@ function drawScreen(){
   const {ctx,w,h} = fitCanvas($('screen'));
   const [r,g,b] = waveRGB(P.lambda);
   for(let x=0;x<w;x++){
-    const y = (x/w*2-1)*P.range;
-    const I = intensity(y,P);
+    // 一個像素取 SS 個點平均（光柵亮紋很細，只取一點會漏掉）
+    let I=0;
+    for(let k=0;k<SS;k++){ I += intensity(((x+(k+0.5)/SS)/w*2-1)*P.range,P); }
+    I/=SS;
     const v = Math.pow(I,0.5);
     ctx.fillStyle = `rgb(${r*v|0},${g*v|0},${b*v|0})`;
     ctx.fillRect(x,0,1,h);
@@ -156,6 +158,7 @@ function drawScreen(){
 }
 
 const PAD = {l:40,r:10,t:10,b:26};
+const SS = 8; // 每個像素的取樣數
 function drawPlot(){
   const {ctx,w,h} = fitCanvas($('plot'));
   const pw = w-PAD.l-PAD.r, ph = h-PAD.t-PAD.b;
@@ -182,13 +185,17 @@ function drawPlot(){
   }
   const [r,g,b]=waveRGB(P.lambda);
   ctx.strokeStyle=`rgb(${Math.max(r,80)},${Math.max(g,80)},${Math.max(b,80)})`; ctx.lineWidth=1.5; ctx.beginPath();
-  for(let x=0;x<=pw;x++){
-    const y=(x/pw*2-1)*P.range, I=intensity(y,P);
-    const py=PAD.t+ph*(1-I); x?ctx.lineTo(PAD.l+x,py):ctx.moveTo(PAD.l+x,py);
-  }
+  traceCurve(ctx,pw,ph,y=>intensity(y,P));
   ctx.stroke(); ctx.lineWidth=1;
 }
 
+function traceCurve(ctx,pw,ph,f){
+  const n=pw*SS;
+  for(let i=0;i<=n;i++){
+    const x=i/SS, y=(i/n*2-1)*P.range, I=f(y);
+    const py=PAD.t+ph*(1-I); i?ctx.lineTo(PAD.l+x,py):ctx.moveTo(PAD.l+x,py);
+  }
+}
 function fmtLen(m){ return m>=1e-3 ? (m*1e3).toFixed(2)+' mm' : (m*1e6).toFixed(0)+' µm'; }
 function updateCalc(){
   const lam=P.lambda*1e-9;
