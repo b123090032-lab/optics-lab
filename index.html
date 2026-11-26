@@ -34,6 +34,11 @@
   .calc{font-size:14px;display:grid;gap:4px}
   .calc span{color:var(--muted)}
   .swatch{display:inline-block;width:14px;height:14px;border-radius:50%;vertical-align:-2px;margin-left:6px;border:1px solid #fff4}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+  .hint{font-size:13px;color:var(--muted)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button.small{min-height:28px;padding:2px 10px;font-size:13px;float:right}
+  #wave{height:240px;background:#000;image-rendering:pixelated}
   @media (max-width:900px){
     main{grid-template-columns:1fr}
     header h1{font-size:20px}
@@ -62,6 +67,16 @@
         <div>θ = <b id="rt">—</b>°</div>
         <div>I/I₀ = <b id="ri">—</b></div>
       </div>
+      <div class="row">
+        <button id="lockBtn">📌 鎖定目前曲線</button>
+        <button id="clearLock" disabled>清除比較線</button>
+        <span class="hint" id="lockInfo"></span>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h2>波前動畫（俯視示意圖，不是真實比例）<button id="playBtn" class="small">⏸ 暫停</button></h2>
+      <canvas id="wave"></canvas>
+      <p class="hint">左邊是狹縫，每個縫都當成一個新的波源（惠更斯原理），往右傳的圓形波互相疊加，亮的地方是建設性干涉。</p>
     </div>
   </section>
   <aside>
@@ -183,6 +198,11 @@ function drawPlot(){
     }
     ctx.stroke(); ctx.setLineDash([]);
   }
+  if(locked){
+    ctx.strokeStyle='#9aa3b8aa'; ctx.lineWidth=1.5; ctx.beginPath();
+    traceCurve(ctx,pw,ph,y=>intensity(y,locked));
+    ctx.stroke();
+  }
   const [r,g,b]=waveRGB(P.lambda);
   ctx.strokeStyle=`rgb(${Math.max(r,80)},${Math.max(g,80)},${Math.max(b,80)})`; ctx.lineWidth=1.5; ctx.beginPath();
   traceCurve(ctx,pw,ph,y=>intensity(y,P));
@@ -228,6 +248,59 @@ $('plot').addEventListener('mousemove',e=>{
   const th=Math.atan(y*1e-3/P.L)*180/Math.PI;
   $('ry').textContent=y.toFixed(2); $('rt').textContent=th.toFixed(3); $('ri').textContent=intensity(y,P).toFixed(3);
 });
+
+
+// ===== 比較模式 =====
+let locked=null;
+function describe(p){ return `λ=${p.lambda}nm N=${p.N} a=${p.a} d=${p.d} L=${p.L}`; }
+$('lockBtn').addEventListener('click',()=>{
+  locked={...P}; $('clearLock').disabled=false;
+  $('lockInfo').textContent='灰線：'+describe(locked); render();
+});
+$('clearLock').addEventListener('click',()=>{
+  locked=null; $('clearLock').disabled=true; $('lockInfo').textContent=''; render();
+});
+
+// ===== 量測游標：手機用 touch =====
+function measureAt(clientX){
+  const rect=$('plot').getBoundingClientRect();
+  const x=clientX-rect.left-PAD.l, pw=rect.width-PAD.l-PAD.r;
+  const y=(x/pw*2-1)*P.range;
+  const th=Math.atan(y*1e-3/P.L)*180/Math.PI;
+  $('ry').textContent=y.toFixed(2); $('rt').textContent=th.toFixed(3); $('ri').textContent=intensity(y,P).toFixed(3);
+}
+$('plot').addEventListener('touchstart',e=>measureAt(e.touches[0].clientX),{passive:true});
+$('plot').addEventListener('touchmove',e=>measureAt(e.touches[0].clientX),{passive:true});
+
+// ===== 波前動畫 =====
+let playing=true, t0=performance.now(), waveImg=null, waveCtx=null, WW=0, WH=0;
+function setupWave(){
+  const c=$('wave'); WW=Math.max(80,Math.floor(c.clientWidth/3)); WH=Math.floor(c.clientHeight/3);
+  c.width=WW; c.height=WH; waveCtx=c.getContext('2d'); waveImg=waveCtx.createImageData(WW,WH);
+}
+function drawWave(now){
+  if(!waveImg) setupWave();
+  const t=(now-t0)/1000;
+  // 示意用的比例：波長換成像素（跟真實 λ 成正比，讓紅光看起來比藍光寬）
+  const lamPx = P.lambda/532*7;
+  const k=2*Math.PI/lamPx, w=2*Math.PI*1.2;
+  const sepPx = Math.min(WH*0.8/Math.max(P.N-1,1), P.d/0.25*12);
+  const srcs=[]; for(let i=0;i<P.N;i++) srcs.push((i-(P.N-1)/2)*sepPx + WH/2);
+  const [r,g,b]=waveRGB(P.lambda);
+  const d=waveImg.data;
+  for(let y=0;y<WH;y++) for(let x=0;x<WW;x++){
+    let A=0;
+    for(let i=0;i<srcs.length;i++){ const dx=x+2, dy=y-srcs[i]; const R=Math.sqrt(dx*dx+dy*dy); A+=Math.cos(k*R-w*t)/Math.sqrt(R); }
+    let v=A/srcs.length*2.2; v=v*v; if(v>1)v=1;
+    const o=(y*WW+x)*4; d[o]=r*v; d[o+1]=g*v; d[o+2]=b*v; d[o+3]=255;
+  }
+  waveCtx.putImageData(waveImg,0,0);
+  waveCtx.fillStyle='#fff'; srcs.forEach(s=>waveCtx.fillRect(0,s-1,2,2));
+}
+function loop(now){ if(playing) drawWave(now); requestAnimationFrame(loop); }
+$('playBtn').addEventListener('click',()=>{ playing=!playing; $('playBtn').textContent=playing?'⏸ 暫停':'▶ 播放'; });
+window.addEventListener('resize',setupWave);
+requestAnimationFrame(loop);
 
 window.addEventListener('resize',render);
 syncInputs(); render();
