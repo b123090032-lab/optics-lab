@@ -18,7 +18,8 @@
   button{font:inherit;border:1px solid var(--line);background:#222944;color:var(--text);border-radius:10px;padding:8px 14px;cursor:pointer;min-height:40px}
   button:hover{border-color:var(--accent)}
   button.primary{background:var(--accent);color:#06121f;border-color:var(--accent);font-weight:700}
-  main{max-width:1200px;margin:0 auto;padding:10px 20px 40px;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px}
+  main{max-width:1200px;margin:0 auto;padding:10px 20px 40px;display:grid;grid-template-columns:minmax(0,1fr) 340px;grid-template-areas:'plot side' 'wave side';align-items:start;gap:18px}
+  main>section:first-child{grid-area:plot} main>aside{grid-area:side} #waveSec{grid-area:wave}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
   .card h2{font-size:15px;margin:0 0 10px;color:var(--muted);font-weight:600}
   canvas{display:block;width:100%;border-radius:8px}
@@ -40,7 +41,7 @@
   button.small{min-height:28px;padding:2px 10px;font-size:13px;float:right}
   #wave{height:240px;background:#000;image-rendering:pixelated}
   @media (max-width:900px){
-    main{grid-template-columns:1fr}
+    main{grid-template-columns:1fr;grid-template-areas:'plot' 'side' 'wave'}
     header h1{font-size:20px}
   }
 </style>
@@ -73,11 +74,6 @@
         <span class="hint" id="lockInfo"></span>
       </div>
     </div>
-    <div class="card" style="margin-top:14px">
-      <h2>波前動畫（俯視示意圖，不是真實比例）<button id="playBtn" class="small">⏸ 暫停</button></h2>
-      <canvas id="wave"></canvas>
-      <p class="hint">左邊是狹縫，每個縫都當成一個新的波源（惠更斯原理），往右傳的圓形波互相疊加，亮的地方是建設性干涉。</p>
-    </div>
   </section>
   <aside>
     <div class="card">
@@ -99,6 +95,11 @@
       </div>
     </div>
   </aside>
+    <section id="waveSec" class="card">
+      <h2>波前動畫（俯視示意圖，不是真實比例）<button id="playBtn" class="small">⏸ 暫停</button></h2>
+      <canvas id="wave"></canvas>
+      <p class="hint">左邊是狹縫，每個縫都當成一個新的波源（惠更斯原理），往右傳的圓形波互相疊加，亮的地方是建設性干涉。</p>
+    </section>
 </main>
 <script>
 const P = { lambda:532, N:2, a:0.04, d:0.25, L:1.0, range:20, envelope:true };
@@ -180,10 +181,11 @@ function drawPlot(){
   ctx.strokeStyle='#2a3150'; ctx.fillStyle='#97a0bf'; ctx.font='11px sans-serif';
   // 格線與刻度
   ctx.beginPath();
-  for(let i=0;i<=8;i++){
-    const x = PAD.l+pw*i/8; ctx.moveTo(x,PAD.t); ctx.lineTo(x,PAD.t+ph);
-    const yv = (-P.range + 2*P.range*i/8);
-    ctx.textAlign = i===0?'left':(i===8?'right':'center'); ctx.fillText(yv.toFixed(1), x, h-8); ctx.textAlign='left';
+  const NT = pw<420 ? 4 : 8;
+  for(let i=0;i<=NT;i++){
+    const x = PAD.l+pw*i/NT; ctx.moveTo(x,PAD.t); ctx.lineTo(x,PAD.t+ph);
+    const yv = (-P.range + 2*P.range*i/NT);
+    ctx.textAlign = i===0?'left':(i===NT?'right':'center'); ctx.fillText(yv.toFixed(1), x, h-8); ctx.textAlign='left';
   }
   for(let i=0;i<=4;i++){
     const y = PAD.t+ph*i/4; ctx.moveTo(PAD.l,y); ctx.lineTo(PAD.l+pw,y);
@@ -284,14 +286,15 @@ function drawWave(now){
   // 示意用的比例：波長換成像素（跟真實 λ 成正比，讓紅光看起來比藍光寬）
   const lamPx = P.lambda/532*7;
   const k=2*Math.PI/lamPx, w=2*Math.PI*1.2;
-  const sepPx = Math.min(WH*0.8/Math.max(P.N-1,1), P.d/0.25*12);
+  const sepPx = Math.min(WH*0.8/Math.max(P.N-1,1), P.d/0.25*24);
   const srcs=[]; for(let i=0;i<P.N;i++) srcs.push((i-(P.N-1)/2)*sepPx + WH/2);
   const [r,g,b]=waveRGB(P.lambda);
   const d=waveImg.data;
   for(let y=0;y<WH;y++) for(let x=0;x<WW;x++){
     let A=0;
-    for(let i=0;i<srcs.length;i++){ const dx=x+2, dy=y-srcs[i]; const R=Math.sqrt(dx*dx+dy*dy); A+=Math.cos(k*R-w*t)/Math.sqrt(R); }
-    let v=A/srcs.length*2.2; v=v*v; if(v>1)v=1;
+    for(let i=0;i<srcs.length;i++){ const dx=x+2, dy=y-srcs[i]; const R=Math.sqrt(dx*dx+dy*dy); A+=Math.cos(k*R-w*t)/Math.sqrt(1+R/30); }
+    // 振幅平方 → 亮度；衰減放慢，不然波傳不到右邊
+    let v=A/srcs.length; v=v*v*1.6; if(v>1)v=1;
     const o=(y*WW+x)*4; d[o]=r*v; d[o+1]=g*v; d[o+2]=b*v; d[o+3]=255;
   }
   waveCtx.putImageData(waveImg,0,0);
