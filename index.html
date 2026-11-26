@@ -340,7 +340,7 @@ function drawWave(now){
     let A=0;
     for(let i=0;i<srcs.length;i++){ const dx=x+2, dy=y-srcs[i]; const R=Math.sqrt(dx*dx+dy*dy); A+=Math.cos(k*R-w*t)/Math.sqrt(1+R/30); }
     // 振幅平方 → 亮度；衰減放慢，不然波傳不到右邊
-    let v=A/srcs.length; v=v*v*1.6; if(v>1)v=1;
+    let v=A*A/srcs.length*0.9; if(v>1)v=1; // 除以 N 而不是 N²，縫多的時候才不會整片變暗
     const o=(y*WW+x)*4; d[o]=r*v; d[o+1]=g*v; d[o+2]=b*v; d[o+3]=255;
   }
   waveCtx.putImageData(waveImg,0,0);
