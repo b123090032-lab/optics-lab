@@ -40,7 +40,8 @@
   button:disabled{opacity:.4;cursor:not-allowed}
   button.small{min-height:28px;padding:2px 10px;font-size:13px;float:right}
   #wave{height:240px;background:#000;image-rendering:pixelated}
-  .toast{min-height:20px;font-size:13px;color:var(--warn);margin-top:6px}
+  .toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);max-width:min(92vw,520px);background:#2b2338;border:1px solid var(--warn);color:var(--warn);padding:10px 14px;border-radius:10px;font-size:14px;box-shadow:0 6px 20px #0008;opacity:0;transition:opacity .2s;pointer-events:none;z-index:10}
+  .toast.show{opacity:1}
   .ok{color:var(--ok)} .bad{color:var(--warn)}
   .masked{filter:blur(6px);pointer-events:none;user-select:none}
   @media (max-width:900px){
@@ -125,6 +126,7 @@
     </section>
 </main>
 <script>
+let challenge=null; // 挑戰模式狀態（放最上面，syncInputs 會用到）
 const P = { lambda:532, N:2, a:0.04, d:0.25, L:1.0, range:20, envelope:true };
 const PRESETS = {
   single:  { lambda:532, N:1, a:0.05, d:0.25, L:1.0, range:50 },
@@ -251,6 +253,7 @@ function updateCalc(){
 
 function syncInputs(){
   KEYS.forEach(k=>{ $(k).value=P[k]; $(k+'N').value=P[k]; });
+  if(challenge){ $('lambdaN').value=''; $('lambdaN').placeholder='???'; $('lambda').value=565; }
   $('range').value=P.range; $('envelope').checked=P.envelope;
 }
 function render(){ drawScreen(); drawPlot(); updateCalc(); save(); }
@@ -331,7 +334,7 @@ requestAnimationFrame(loop);
 // ===== 防呆：範圍夾住、d 不能小於 a =====
 const LIM={lambda:[380,750],N:[1,10],a:[0.01,0.2],d:[0.05,1],L:[0.5,3]};
 let toastTimer=null;
-function toast(msg){ $('toast').textContent=msg; clearTimeout(toastTimer); toastTimer=setTimeout(()=>$('toast').textContent='',3500); }
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>{t.classList.remove('show');},3500); }
 function sanitize(changed){
   KEYS.forEach(k=>{
     let v=+P[k]; if(!isFinite(v)) v=LIM[k][0];
@@ -355,6 +358,8 @@ function loadInitial(){
     const m={l:'lambda',n:'N',a:'a',d:'d',L:'L',r:'range'};
     for(const [k,v] of h){ if(m[k]) P[m[k]]=parseFloat(v); }
     if(![5,10,20,50].includes(P.range)) P.range=20;
+    // 讀完就把 #hash 拿掉，不然之後改參數再重新整理又會被網址蓋回去
+    history.replaceState(null,'',location.pathname+location.search);
     return;
   }
   try{ const s=JSON.parse(localStorage.getItem(STORE)); if(s) Object.assign(P,s); }catch(e){}
@@ -376,7 +381,6 @@ $('pngBtn').addEventListener('click',()=>{
 $('resetBtn').addEventListener('click',()=>{ Object.assign(P,PRESETS.double,{envelope:true}); history.replaceState(null,'',location.pathname); syncInputs(); render(); });
 
 // ===== 挑戰模式 =====
-let challenge=null;
 function newQuestion(){
   challenge.answer = 400 + Math.round(Math.random()*30)*10;
   challenge.d = [0.15,0.2,0.25,0.3][Math.floor(Math.random()*4)];
@@ -391,6 +395,8 @@ function setMasked(on){
   ['lambda','lambdaN','N','NN','a','aN','d','dN','L','LN'].forEach(id=>$(id).disabled=on);
   document.querySelectorAll('[data-preset]').forEach(b=>b.disabled=on);
   $('lambda').closest('.ctrl').classList.toggle('masked',on);
+  $('lockBtn').disabled=on; if(on){ locked=null; $('clearLock').disabled=true; $('lockInfo').textContent=''; }
+  $('shareBtn').disabled=on;
   $('cdy').closest('.calc').classList.toggle('masked',on);
 }
 $('chStart').addEventListener('click',()=>{
@@ -426,6 +432,7 @@ $('chSubmit').addEventListener('click',()=>{
 $('chGuess').addEventListener('keydown',e=>{ if(e.key==='Enter') $('chSubmit').click(); });
 $('chQuit').addEventListener('click',()=>{ endChallenge(); toast('已放棄這輪挑戰'); });
 
+window.addEventListener('hashchange',()=>{ if(challenge||!location.hash) return; loadInitial(); sanitize(); syncInputs(); render(); toast('已套用分享連結的參數'); });
 window.addEventListener('resize',render);
 loadInitial(); sanitize(); syncInputs(); render();
 $('best').textContent=localStorage.getItem(BEST)||'—';
