@@ -45,6 +45,8 @@
   .toast.show{opacity:1}
   .ok{color:var(--ok)} .bad{color:var(--warn)}
   .masked{filter:blur(6px);pointer-events:none;user-select:none}
+  footer{max-width:1200px;margin:0 auto;padding:0 20px 40px;font-size:13px;color:var(--muted)}
+  footer a{color:var(--accent)}
   @media (max-width:900px){
     main{grid-template-columns:1fr;grid-template-areas:'plot' 'side' 'wave'}
     header h1{font-size:20px}
@@ -127,6 +129,7 @@
       <p class="hint">左邊是狹縫，每個縫都當成一個新的波源（惠更斯原理），往右傳的圓形波互相疊加，亮的地方是建設性干涉。</p>
     </section>
 </main>
+<footer>生成式AI 第五週作業（補交）・<a href="https://github.com/b123090032-lab/optics-lab/blob/main/SPEC.md">規格書</a>・<a href="https://github.com/b123090032-lab/optics-lab/blob/main/ITERATIONS.md">AI 修改紀錄</a>・<a href="https://github.com/b123090032-lab/optics-lab">原始碼</a></footer>
 <script>
 let challenge=null; // 挑戰模式狀態（放最上面，syncInputs 會用到）
 const P = { lambda:532, N:2, a:0.04, d:0.25, L:1.0, range:20, envelope:true };
